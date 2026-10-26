@@ -1,0 +1,467 @@
+/* ===================================================
+   iMovies — Premium Cinema Design System
+   Theme: Obsidian Cinema & Crimson Red Glow
+   =================================================== */
+
+:root {
+  --imv-bg-main: #0c0d14;
+  --imv-bg-surface: #141622;
+  --imv-bg-card: #181b29;
+  --imv-bg-elevated: #202438;
+  --imv-border: #262c42;
+  --imv-border-light: #333a56;
+  
+  --imv-primary: #e50914;
+  --imv-primary-hover: #ff222d;
+  --imv-primary-glow: rgba(229, 9, 20, 0.35);
+  
+  --imv-accent-gold: #ffb800;
+  --imv-accent-blue: #38bdf8;
+  --imv-accent-emerald: #10b981;
+  
+  --imv-text-main: #f8fafc;
+  --imv-text-muted: #94a3b8;
+  --imv-text-subtle: #64748b;
+  
+  --font-display: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--imv-bg-main);
+  color: var(--imv-text-main);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6, .brand-font {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #090a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: #252b40;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--imv-primary);
+}
+
+/* Glassmorphism Navigation */
+.imv-navbar {
+  background: rgba(12, 13, 20, 0.88);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--imv-border);
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+  transition: all 0.3s ease;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+.brand-badge {
+  background: var(--imv-primary);
+  color: white;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 12px var(--imv-primary-glow);
+}
+
+/* Cinema Buttons */
+.btn-cinema {
+  background: var(--imv-primary);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 22px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 18px var(--imv-primary-glow);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-cinema:hover {
+  background: var(--imv-primary-hover);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(229, 9, 20, 0.55);
+}
+
+.btn-cinema-outline {
+  background: transparent;
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  border: 1px solid var(--imv-border-light);
+  border-radius: 8px;
+  padding: 10px 22px;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-cinema-outline:hover {
+  background: var(--imv-bg-elevated);
+  border-color: var(--imv-text-muted);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+/* Hero Section */
+.hero-banner {
+  position: relative;
+  min-height: 540px;
+  display: flex;
+  align-items: center;
+  background-size: cover;
+  background-position: center;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+}
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(12, 13, 20, 0.95) 0%,
+    rgba(12, 13, 20, 0.8) 50%,
+    rgba(12, 13, 20, 0.4) 100%
+  );
+}
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 650px;
+  padding: 50px;
+}
+
+/* Movie Cards */
+.movie-card {
+  background: var(--imv-bg-card);
+  border: 1px solid var(--imv-border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.movie-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(229, 9, 20, 0.4);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5), 0 0 20px var(--imv-primary-glow);
+}
+.poster-wrapper {
+  position: relative;
+  aspect-ratio: 2/3;
+  overflow: hidden;
+  background-color: #12141d;
+}
+.movie-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+.movie-card:hover .movie-poster {
+  transform: scale(1.05);
+}
+.poster-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  color: var(--imv-text-main);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.poster-rating {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  color: var(--imv-accent-gold);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.movie-info {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+.movie-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.genre-tag {
+  background: var(--imv-bg-elevated);
+  color: var(--imv-text-muted);
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-right: 5px;
+  margin-bottom: 5px;
+}
+
+/* ===================================================
+   Cinema Auditorium Seating Matrix Layout
+   =================================================== */
+.theater-screen-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 25px 0 35px 0;
+}
+.cinema-screen-curved {
+  width: 75%;
+  height: 12px;
+  border-top: 4px solid #38bdf8;
+  border-radius: 50% 50% 0 0;
+  box-shadow: 0 -12px 25px rgba(56, 189, 248, 0.35);
+  margin-bottom: 10px;
+}
+.screen-label {
+  font-size: 0.75rem;
+  color: var(--imv-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 700;
+}
+
+/* Seat Buttons */
+.seat-btn {
+  width: 32px;
+  height: 32px;
+  margin: 3px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  user-select: none;
+}
+.seat-btn.available-silver {
+  background: #1e2438;
+  color: #cbd5e1;
+  border-color: #2e3752;
+}
+.seat-btn.available-silver:hover {
+  background: #2b344f;
+  transform: scale(1.15);
+  border-color: #38bdf8;
+}
+
+.seat-btn.available-gold {
+  background: #22273d;
+  color: #e2e8f0;
+  border-color: #3b4263;
+}
+.seat-btn.available-gold:hover {
+  background: #333a59;
+  transform: scale(1.15);
+  border-color: var(--imv-accent-gold);
+}
+
+.seat-btn.available-vip {
+  background: #281d33;
+  color: #f3e8ff;
+  border-color: #583375;
+}
+.seat-btn.available-vip:hover {
+  background: #42285a;
+  transform: scale(1.15);
+  border-color: #c084fc;
+}
+
+.seat-btn.selected {
+  background: var(--imv-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 14px var(--imv-primary);
+  transform: scale(1.12);
+  border-color: #ff6b75 !important;
+}
+
+.seat-btn.booked {
+  background: #13151f !important;
+  color: #3f4458 !important;
+  border-color: #1a1e2e !important;
+  cursor: not-allowed;
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* Ticket Receipt Card */
+.ticket-card {
+  background: #141624;
+  border: 1px dashed var(--imv-border-light);
+  border-radius: 16px;
+  padding: 24px;
+  position: relative;
+  box-shadow: 0 16px 35px rgba(0, 0, 0, 0.4);
+}
+.ticket-notch-left, .ticket-notch-right {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: var(--imv-bg-main);
+  border-radius: 50%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.ticket-notch-left {
+  left: -12px;
+}
+.ticket-notch-right {
+  right: -12px;
+}
+
+/* Modals */
+.modal-content-cinema {
+  background: var(--imv-bg-surface);
+  border: 1px solid var(--imv-border);
+  border-radius: 16px;
+  color: #fff;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+}
+
+/* Admin Dashboard Elements */
+.admin-sidebar {
+  background: #0f1019;
+  border-right: 1px solid var(--imv-border);
+  min-height: calc(100vh - 70px);
+}
+.admin-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  color: var(--imv-text-muted);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.admin-nav-item:hover, .admin-nav-item.active {
+  background: var(--imv-bg-elevated);
+  color: #fff;
+}
+.admin-nav-item.active {
+  border-left: 3px solid var(--imv-primary);
+  font-weight: 600;
+}
+
+.stat-card {
+  background: var(--imv-bg-card);
+  border: 1px solid var(--imv-border);
+  border-radius: 12px;
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.stat-card-glow {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  filter: blur(28px);
+  opacity: 0.25;
+}
+
+/* Form Controls */
+.form-control-cinema, .form-select-cinema {
+  background-color: var(--imv-bg-card);
+  border: 1px solid var(--imv-border);
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+.form-control-cinema:focus, .form-select-cinema:focus {
+  background-color: var(--imv-bg-elevated);
+  border-color: var(--imv-primary);
+  box-shadow: 0 0 0 3px var(--imv-primary-glow);
+  color: #fff;
+}
+.form-control-cinema::placeholder {
+  color: var(--imv-text-subtle);
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .hero-banner {
+    min-height: 420px;
+  }
+  .hero-content {
+    padding: 24px;
+  }
+  .seat-btn {
+    width: 27px;
+    height: 27px;
+    font-size: 0.62rem;
+    margin: 2px;
+  }
+}
