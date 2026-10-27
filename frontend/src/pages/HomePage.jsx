@@ -1,349 +1,459 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { movieService } from '../services/movieService';
+import { favoriteService } from '../services/favoriteService';
 import MovieCard from '../components/MovieCard';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { toast } from 'react-toastify';
 import {
-  FaSearch,
-  FaTicketAlt,
-  FaPlay,
-  FaStar,
-  FaShieldAlt,
-  FaBolt,
-  FaMobileAlt,
-  FaUndo,
-} from 'react-icons/fa';
+  Play,
+  Ticket,
+  Heart,
+  Star,
+  Search,
+  Clock,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  X,
+} from 'lucide-react';
 
-const GENRES = ['All', 'Sci-Fi', 'Action', 'Drama', 'Adventure', 'Biography', 'Animation'];
+const GENRES = ['All', 'Action', 'Sci-Fi', 'Drama', 'Adventure', 'Biography', 'Animation', 'Crime'];
+const LANGUAGES = ['All', 'English', 'Hindi'];
 
-const HomePage = () => {
+export default function HomePage() {
   const [movies, setMovies] = useState([]);
   const [featuredMovie, setFeaturedMovie] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [selectedGenre, setSelectedGenre] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState('All');
+  const [selectedLanguage, setSelectedLanguage] = useState('All');
+  const [trailerModal, setTrailerModal] = useState(null); // url or null
+  const [inWatchlist, setInWatchlist] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchMovies();
-  }, []);
+    const delayDebounceFn = setTimeout(() => {
+      fetchMovies(searchQuery);
+    }, 400);
 
-  const fetchMovies = async () => {
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  const fetchMovies = async (query = '') => {
     try {
-      setLoading(true);
-      setError('');
-      const data = await movieService.getMovies();
+      if (!movies.length) setLoading(true);
+      const params = {};
+      if (query && query.trim()) params.search = query.trim();
+      const data = await movieService.getMovies(params);
       if (data?.movies) {
         setMovies(data.movies);
-        // Set featured movie
-        const featured = data.movies.find((m) => m.featured && m.status === 'now_showing') || data.movies[0];
-        setFeaturedMovie(featured);
+        if (!featuredMovie || !query.trim()) {
+          const feat = data.movies.find(m => m.featured && m.status === 'now_showing') || data.movies[0];
+          setFeaturedMovie(feat);
+        }
       }
     } catch (err) {
       console.error('Error fetching movies:', err);
-      setError('Unable to connect to the backend server. Please verify the API is running.');
+      toast.error('Unable to fetch live movies.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/movies?search=${encodeURIComponent(searchQuery.trim())}`);
+  const handleToggleWatchlist = async (movie) => {
+    if (!movie) return;
+    try {
+      const res = await favoriteService.toggleFavorite({
+        movieId: movie._id,
+        movieName: movie.title || movie.movieName,
+        posterUrl: movie.posterUrl,
+      });
+      setInWatchlist(res.isFavorite);
+      toast.success(res.isFavorite ? `Added "${movie.title || movie.movieName}" to Watchlist` : 'Removed from Watchlist');
+    } catch (err) {
+      toast.error('Could not update watchlist');
     }
   };
 
-  const nowShowing = movies.filter((m) => {
-    const isNow = m.status === 'now_showing';
-    const matchesGenre =
-      selectedGenre === 'All' ||
-      (m.genre && m.genre.some((g) => g.toLowerCase() === selectedGenre.toLowerCase()));
-    return isNow && matchesGenre;
+  const scrollRow = (id, direction) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const scrollAmount = direction === 'left' ? -480 : 480;
+      el.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
+
+  // Filtered movies based on user search, genre, and language
+  const filteredMovies = movies.filter((m) => {
+    const title = (m.title || m.movieName || '').toLowerCase();
+    const desc = (m.description || '').toLowerCase();
+    const cast = (m.cast || []).join(' ').toLowerCase();
+    const matchesSearch = !searchQuery.trim() ||
+      title.includes(searchQuery.toLowerCase()) ||
+      desc.includes(searchQuery.toLowerCase()) ||
+      cast.includes(searchQuery.toLowerCase());
+
+    const mGenres = m.genres || m.genre || [];
+    const matchesGenre = selectedGenre === 'All' ||
+      mGenres.some(g => g.toLowerCase() === selectedGenre.toLowerCase());
+
+    const matchesLanguage = selectedLanguage === 'All' ||
+      (m.language && m.language.toLowerCase().includes(selectedLanguage.toLowerCase()));
+
+    return matchesSearch && matchesGenre && matchesLanguage;
   });
 
-  const upcomingMovies = movies.filter((m) => m.status === 'upcoming');
+  // Categorised rows for Amazon Prime Video layout
+  const trendingNow = filteredMovies.filter(m => m.status === 'now_showing');
+  const topRated = [...filteredMovies].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const actionThrillers = filteredMovies.filter(m => {
+    const g = (m.genres || m.genre || []).map(x => x.toLowerCase());
+    return g.includes('action') || g.includes('thriller') || g.includes('crime');
+  });
+  const sciFiFantasy = filteredMovies.filter(m => {
+    const g = (m.genres || m.genre || []).map(x => x.toLowerCase());
+    return g.includes('sci-fi') || g.includes('adventure') || g.includes('animation');
+  });
+  const dramas = filteredMovies.filter(m => {
+    const g = (m.genres || m.genre || []).map(x => x.toLowerCase());
+    return g.includes('drama') || g.includes('biography') || g.includes('history');
+  });
 
   if (loading) {
-    return <LoadingSpinner message="Curating cinema experience..." />;
+    return <LoadingSpinner message="Curating Prime Cinema catalog…" />;
   }
 
   return (
-    <div className="container py-4">
-      {/* Error alert if backend offline */}
-      {error && (
-        <div className="alert alert-danger bg-dark border-danger text-danger d-flex justify-content-between align-items-center mb-4">
-          <span>{error}</span>
-          <button onClick={fetchMovies} className="btn btn-outline-danger btn-sm">
-            Retry Connection
-          </button>
-        </div>
-      )}
-
-      {/* Hero Showcase Banner */}
-      {featuredMovie && (
-        <section className="mb-5">
+    <div className="pb-20" style={{ background: '#0f171e' }}>
+      {/* Prime Hero Billboard Carousel */}
+      {featuredMovie && !searchQuery && (
+        <section className="relative min-h-[500px] md:min-h-[620px] flex items-center overflow-hidden">
           <div
-            className="hero-banner"
+            className="absolute inset-0 bg-cover bg-center transition-all duration-700"
             style={{
               backgroundImage: `url(${featuredMovie.backdropUrl || featuredMovie.posterUrl})`,
             }}
-          >
-            <div className="hero-overlay"></div>
-            <div className="hero-content">
-              <div className="d-flex align-items-center gap-2 mb-3">
-                <span className="badge bg-danger text-uppercase px-2 py-1 fw-bold">
-                  Featured Release
+          />
+          {/* Prime Video horizontal gradient fade */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0f171e] via-[#0f171e]/85 to-transparent z-10" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0f171e] via-transparent to-transparent z-10" />
+
+          <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 py-20 w-full">
+            <div className="max-w-xl">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="badge-prime text-xs font-bold tracking-wider">
+                  FEATURED ON PRIME
                 </span>
-                <span className="badge bg-dark border border-secondary text-light">
-                  {featuredMovie.censorRating || 'UA'}
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-[#1a242f] border border-[#2c3e50] text-[#8ea3b0]">
+                  {featuredMovie.certification || 'UA 16+'}
                 </span>
-                <span className="badge bg-dark border border-secondary text-warning d-flex align-items-center gap-1">
-                  <FaStar size={11} /> {featuredMovie.rating?.toFixed(1) || '8.5'}
+                <span className="flex items-center gap-1 text-xs font-bold text-yellow-400 bg-[#1a242f] px-2 py-0.5 rounded border border-[#2c3e50]">
+                  <Star size={12} fill="#f5a623" color="#f5a623" />
+                  {featuredMovie.rating || '8.8'} IMDb
+                </span>
+                <span className="text-xs text-[#8ea3b0] flex items-center gap-1">
+                  <Clock size={12} /> {featuredMovie.duration}
                 </span>
               </div>
 
-              <h1 className="display-4 fw-black text-white mb-2">{featuredMovie.title}</h1>
+              <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-white tracking-tight leading-tight mb-4">
+                {featuredMovie.title || featuredMovie.movieName}
+              </h1>
 
-              <p className="text-secondary mb-3 small d-flex flex-wrap gap-2">
-                <span>{featuredMovie.duration} mins</span>
-                <span>•</span>
-                <span>{Array.isArray(featuredMovie.language) ? featuredMovie.language.join(', ') : featuredMovie.language}</span>
-                <span>•</span>
-                <span>{Array.isArray(featuredMovie.genre) ? featuredMovie.genre.join(', ') : featuredMovie.genre}</span>
-              </p>
-
-              <p
-                className="text-light mb-4"
-                style={{
-                  lineHeight: '1.6',
-                  maxHeight: '75px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                }}
-              >
+              <p className="text-sm md:text-base text-[#8ea3b0] mb-6 line-clamp-3 leading-relaxed">
                 {featuredMovie.description}
               </p>
 
-              <div className="d-flex flex-wrap gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Link
-                  to={`/movies/${featuredMovie._id}/theaters`}
-                  className="btn btn-cinema btn-lg px-4"
+                  to={`/movieshows/${featuredMovie._id}`}
+                  className="btn-prime text-sm px-6 py-2.5 rounded-md font-bold shadow-lg shadow-[#00a8e1]/30 no-underline"
                 >
-                  <FaTicketAlt size={16} /> Book Tickets Now
+                  <Ticket size={17} /> Book Tickets
                 </Link>
-                {featuredMovie.trailerUrl && (
-                  <a
-                    href={featuredMovie.trailerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-cinema-outline btn-lg px-4"
-                  >
-                    <FaPlay size={13} /> Watch Trailer
-                  </a>
-                )}
+
+                <button
+                  type="button"
+                  onClick={() => setTrailerModal(featuredMovie.trailerUrl)}
+                  className="btn-prime-outline text-sm px-5 py-2.5 rounded-md font-semibold"
+                >
+                  <Play size={15} /> Watch Trailer
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleWatchlist(featuredMovie)}
+                  className="p-2.5 rounded-md border border-[#2c3e50] bg-[#1a242f] hover:border-[#00a8e1] text-white transition-colors"
+                  title="Watchlist"
+                >
+                  <Heart size={18} className={inWatchlist ? 'fill-red-500 text-red-500' : ''} />
+                </button>
               </div>
             </div>
           </div>
         </section>
       )}
 
-      {/* Interactive Search & Quick Filters Bar */}
-      <section className="mb-5">
-        <div
-          className="p-4 rounded-4"
-          style={{
-            backgroundColor: 'var(--imv-bg-card)',
-            border: '1px solid var(--imv-border)',
-          }}
-        >
-          <div className="row g-3 align-items-center">
-            {/* Search Input */}
-            <div className="col-lg-6">
-              <form onSubmit={handleSearchSubmit} className="position-relative">
-                <input
-                  type="text"
-                  className="form-control form-control-cinema ps-5"
-                  placeholder="Search movies by title, actor, or director..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <FaSearch
-                  className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary"
-                  size={16}
-                />
-              </form>
-            </div>
+      {/* Search & Filters Controls */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-4">
+        <div className="p-4 rounded-xl border border-[#2c3e50] flex flex-col md:flex-row items-center justify-between gap-4"
+             style={{ background: '#1a242f' }}>
+          {/* Search Box */}
+          <div className="relative w-full md:w-96">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#4a6275]" />
+            <input
+              type="text"
+              className="input-prime pl-10 text-sm py-2"
+              placeholder="Search by title, actor, or genre..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#4a6275] hover:text-white"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
 
-            {/* Quick Genre Pills */}
-            <div className="col-lg-6">
-              <div className="d-flex align-items-center gap-2 overflow-auto pb-1">
-                <span className="text-secondary small fw-semibold me-1 d-none d-sm-inline">
-                  Genre:
-                </span>
-                {GENRES.map((genre) => (
+          {/* Language Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#4a6275] whitespace-nowrap">
+              Language:
+            </span>
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang}
+                onClick={() => setSelectedLanguage(lang)}
+                className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition-all ${
+                  selectedLanguage === lang
+                    ? 'border-[#00a8e1] bg-[#00a8e1]/15 text-[#00a8e1]'
+                    : 'border-[#2c3e50] text-[#8ea3b0] hover:text-white'
+                }`}
+              >
+                {lang}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Genre Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto py-4 scrollbar-none">
+          {GENRES.map((genre) => (
+            <button
+              key={genre}
+              onClick={() => setSelectedGenre(genre)}
+              className={`genre-pill ${selectedGenre === genre ? 'active' : ''}`}
+            >
+              {genre}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Movie Row Section Helper */}
+      {filteredMovies.length === 0 ? (
+        <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+          <p className="text-base text-[#8ea3b0]">
+            No movies found matching your search and filter criteria.
+          </p>
+          <button
+            onClick={() => { setSearchQuery(''); setSelectedGenre('All'); setSelectedLanguage('All'); }}
+            className="btn-prime text-xs mt-4 py-2 px-4 rounded"
+          >
+            Clear Filters
+          </button>
+        </div>
+      ) : (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-10 mt-4">
+          {/* Row 1: Trending Now on iMovies */}
+          {trendingNow.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="section-title">Trending Now on iMovies</h3>
+                <div className="flex items-center gap-1.5">
                   <button
-                    key={genre}
-                    onClick={() => setSelectedGenre(genre)}
-                    className={`btn btn-sm text-nowrap rounded-pill px-3 transition-all ${
-                      selectedGenre === genre
-                        ? 'btn-danger text-white'
-                        : 'btn-dark text-secondary border-secondary'
-                    }`}
+                    onClick={() => scrollRow('row-trending', 'left')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
                   >
-                    {genre}
+                    <ChevronLeft size={16} />
                   </button>
+                  <button
+                    onClick={() => scrollRow('row-trending', 'right')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div id="row-trending" className="carousel-track">
+                {trendingNow.map((movie) => (
+                  <div key={movie._id} className="w-[180px] sm:w-[210px]">
+                    <MovieCard movie={movie} />
+                  </div>
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-      </section>
+          )}
 
-      {/* Now Showing Section */}
-      <section className="mb-5">
-        <div className="d-flex align-items-center justify-content-between mb-4">
-          <div>
-            <h2 className="text-white mb-1">
-              Now <span style={{ color: 'var(--imv-primary)' }}>Showing</span>
-            </h2>
-            <p className="text-secondary small mb-0">
-              Catch the latest blockbusters on the biggest multiplex screens
-            </p>
-          </div>
-          <Link to="/movies" className="btn btn-cinema-outline btn-sm">
-            Explore All Movies &rarr;
-          </Link>
-        </div>
-
-        {nowShowing.length === 0 ? (
-          <div className="text-center py-5 bg-dark rounded-4 border border-secondary text-secondary">
-            <p className="mb-2">No movies found matching category "{selectedGenre}".</p>
-            <button
-              onClick={() => setSelectedGenre('All')}
-              className="btn btn-sm btn-outline-danger"
-            >
-              Reset Category
-            </button>
-          </div>
-        ) : (
-          <div className="row g-4 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4">
-            {nowShowing.map((movie) => (
-              <div key={movie._id} className="col">
-                <MovieCard movie={movie} />
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Upcoming Movies Teaser Section */}
-      {upcomingMovies.length > 0 && (
-        <section className="mb-5">
-          <div className="d-flex align-items-center justify-content-between mb-4">
+          {/* Row 2: Top Rated Blockbusters */}
+          {topRated.length > 0 && (
             <div>
-              <h2 className="text-white mb-1">
-                Upcoming <span style={{ color: 'var(--imv-accent-gold)' }}>Releases</span>
-              </h2>
-              <p className="text-secondary small mb-0">
-                Get ready for cinematic spectacles hitting theaters soon
-              </p>
-            </div>
-            <Link
-              to="/movies?status=upcoming"
-              className="btn btn-outline-warning btn-sm"
-            >
-              View Anticipated Movies &rarr;
-            </Link>
-          </div>
-
-          <div className="row g-4 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4">
-            {upcomingMovies.map((movie) => (
-              <div key={movie._id} className="col">
-                <MovieCard movie={movie} />
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="section-title">Top Rated Blockbusters</h3>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => scrollRow('row-toprated', 'left')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => scrollRow('row-toprated', 'right')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
-        </section>
+
+              <div id="row-toprated" className="carousel-track">
+                {topRated.map((movie) => (
+                  <div key={movie._id} className="w-[180px] sm:w-[210px]">
+                    <MovieCard movie={movie} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Row 3: Action & Thrillers */}
+          {actionThrillers.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="section-title">Action & Thrillers</h3>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => scrollRow('row-action', 'left')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => scrollRow('row-action', 'right')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div id="row-action" className="carousel-track">
+                {actionThrillers.map((movie) => (
+                  <div key={movie._id} className="w-[180px] sm:w-[210px]">
+                    <MovieCard movie={movie} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Row 4: Sci-Fi & Spectacles */}
+          {sciFiFantasy.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="section-title">Sci-Fi & Adventures</h3>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => scrollRow('row-scifi', 'left')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => scrollRow('row-scifi', 'right')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div id="row-scifi" className="carousel-track">
+                {sciFiFantasy.map((movie) => (
+                  <div key={movie._id} className="w-[180px] sm:w-[210px]">
+                    <MovieCard movie={movie} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Row 5: Dramas */}
+          {dramas.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="section-title">Critically Acclaimed Dramas</h3>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => scrollRow('row-drama', 'left')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => scrollRow('row-drama', 'right')}
+                    className="p-1.5 rounded-full border border-[#2c3e50] bg-[#1a242f] text-white hover:border-[#00a8e1] transition-colors"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div id="row-drama" className="carousel-track">
+                {dramas.map((movie) => (
+                  <div key={movie._id} className="w-[180px] sm:w-[210px]">
+                    <MovieCard movie={movie} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Why Choose iMovies Features Banner */}
-      <section className="my-5 py-4">
-        <div className="text-center mb-5">
-          <h3 className="text-white fw-bold">The Modern Cinema Experience</h3>
-          <p className="text-secondary small">
-            Designed to make booking movie tickets fast, transparent, and enjoyable
-          </p>
-        </div>
-
-        <div className="row g-4">
-          <div className="col-md-3 col-sm-6">
-            <div className="p-4 rounded-4 h-100 bg-dark border border-secondary text-center">
-              <div
-                className="d-inline-flex p-3 rounded-circle mb-3 text-danger"
-                style={{ backgroundColor: 'rgba(229, 9, 20, 0.15)' }}
+      {/* Trailer Modal */}
+      {trailerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="relative w-full max-w-4xl bg-[#141d26] rounded-xl overflow-hidden border border-[#2c3e50]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#2c3e50]">
+              <span className="text-sm font-bold text-white flex items-center gap-2">
+                <Play size={14} className="text-[#00a8e1]" /> Official Trailer
+              </span>
+              <button
+                onClick={() => setTrailerModal(null)}
+                className="text-[#8ea3b0] hover:text-white p-1"
               >
-                <FaBolt size={24} />
-              </div>
-              <h6 className="text-white fw-bold mb-2">Instant Seat Locking</h6>
-              <p className="text-secondary small mb-0">
-                Live interactive seat matrix with atomic seat locking ensures zero double-booking.
-              </p>
+                <X size={18} />
+              </button>
             </div>
-          </div>
-
-          <div className="col-md-3 col-sm-6">
-            <div className="p-4 rounded-4 h-100 bg-dark border border-secondary text-center">
-              <div
-                className="d-inline-flex p-3 rounded-circle mb-3 text-warning"
-                style={{ backgroundColor: 'rgba(255, 184, 0, 0.15)' }}
-              >
-                <FaShieldAlt size={24} />
-              </div>
-              <h6 className="text-white fw-bold mb-2">Transparent Pricing</h6>
-              <p className="text-secondary small mb-0">
-                Clear tier pricing for Silver, Gold, and VIP recliner seats with no hidden markups.
-              </p>
-            </div>
-          </div>
-
-          <div className="col-md-3 col-sm-6">
-            <div className="p-4 rounded-4 h-100 bg-dark border border-secondary text-center">
-              <div
-                className="d-inline-flex p-3 rounded-circle mb-3 text-info"
-                style={{ backgroundColor: 'rgba(56, 189, 248, 0.15)' }}
-              >
-                <FaMobileAlt size={24} />
-              </div>
-              <h6 className="text-white fw-bold mb-2">Instant M-Ticket</h6>
-              <p className="text-secondary small mb-0">
-                Receive digital boarding tickets with simulation QR codes directly in your account.
-              </p>
-            </div>
-          </div>
-
-          <div className="col-md-3 col-sm-6">
-            <div className="p-4 rounded-4 h-100 bg-dark border border-secondary text-center">
-              <div
-                className="d-inline-flex p-3 rounded-circle mb-3 text-success"
-                style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)' }}
-              >
-                <FaUndo size={24} />
-              </div>
-              <h6 className="text-white fw-bold mb-2">Easy Cancellations</h6>
-              <p className="text-secondary small mb-0">
-                Cancel tickets anytime before showtime with one click and instant seat release.
-              </p>
+            <div className="aspect-video w-full bg-black">
+              <iframe
+                src={trailerModal}
+                title="Movie Trailer"
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
             </div>
           </div>
         </div>
-      </section>
+      )}
     </div>
   );
-};
-
-export default HomePage;
+}

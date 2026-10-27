@@ -1,166 +1,331 @@
-const Booking = require('../models/Booking');
-const Show = require('../models/Show');
+const Booking = require('../models/bookingModel');
+const Show = require('../models/showModel');
+const store = require('../config/store');
+const { cleanShowSeatLocks } = require('./showController');
+const emailService = require('../services/emailService');
 
-// @desc    Create a new seat booking (Concurrency-Safe)
-// @route   POST /api/bookings
-// @access  Private
-const createBooking = async (req, res, next) => {
+// @desc    Temporary Seat Locking with TTL Expiration
+// @route   POST /api/bookings/lock
+// @access  Private / Public with email
+const lockSeats = async (req, res, next) => {
   try {
-    const { showId, selectedSeats, paymentMethod, paymentDetails } = req.body;
+    const { showId, selectedSeats, userEmail } = req.body;
+    const email = userEmail || req.user?.email;
 
     if (!showId || !selectedSeats || !Array.isArray(selectedSeats) || selectedSeats.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide a valid showId and at least one selected seat',
+        message: 'Please provide showId and at least one seat to lock',
       });
     }
 
-    // 1. Fetch current show
-    const show = await Show.findById(showId).populate('movie').populate('theater');
-    if (!show) {
-      return res.status(404).json({
-        success: false,
-        message: 'Show not found',
-      });
-    }
-
-    if (!show.isActive) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: 'This show is no longer active for booking',
+        message: 'User email is required to lock seats',
       });
     }
 
-    // 2. Validate requested seats exist and are currently unbooked
-    const requestedSeatObjects = [];
-    const alreadyBookedSeats = [];
+    // 1. Locate show
+    let show = null;
+    try {
+      show = await Show.findById(showId);
+      if (!show) show = await Show.findOne({ showId });
+    } catch (e) {
+      show = store.shows.find(s => s._id === showId || s.showId === showId);
+    }
+    if (!show) {
+      show = store.shows.find(s => s._id === showId || s.showId === showId);
+    }
 
-    for (const seatNum of selectedSeats) {
-      const foundSeat = show.seatMatrix.find((s) => s.seatNumber === seatNum);
-      if (!foundSeat) {
-        return res.status(400).json({
-          success: false,
-          message: `Seat ${seatNum} is invalid for this auditorium layout`,
-        });
+    if (!show) {
+      return res.status(404).json({ success: false, message: 'Show not found' });
+    }
+
+    // Clean any expired locks first
+    cleanShowSeatLocks(show);
+
+    const now = Date.now();
+    const ttlMinutes = 5;
+    const lockExpiresAt = new Date(now + ttlMinutes * 60 * 1000);
+
+    // 2. Validate availability of all selected seats
+    const conflicts = [];
+    selectedSeats.forEach((seatNum) => {
+      const seat = show.tickets ? show.tickets[seatNum] : null;
+      if (!seat) {
+        conflicts.push(`Seat ${seatNum} does not exist`);
+        return;
       }
-      if (foundSeat.isBooked) {
-        alreadyBookedSeats.push(seatNum);
-      } else {
-        requestedSeatObjects.push(foundSeat);
+      if (seat.status === 'booked') {
+        conflicts.push(`Seat ${seatNum} is already booked`);
+      } else if (seat.status === 'locked' && seat.lockedBy !== email) {
+        conflicts.push(`Seat ${seatNum} is temporarily locked by another user`);
       }
-    }
-
-    if (alreadyBookedSeats.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: `Seat(s) ${alreadyBookedSeats.join(', ')} have just been booked by another user. Please select different seats.`,
-      });
-    }
-
-    // 3. Concurrency-Safe Atomic Update:
-    // Update only if none of the requested seats have been marked as isBooked: true in the interim
-    const bookingRef = `IMV-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    const simPaymentId = `PAY-SIM-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
-
-    // Perform atomic update on Show document
-    // We update the specific seats in seatMatrix
-    const atomicUpdateResult = await Show.findOneAndUpdate(
-      {
-        _id: showId,
-        // Ensure no seat in requestedSeats is booked
-        seatMatrix: {
-          $not: {
-            $elemMatch: {
-              seatNumber: { $in: selectedSeats },
-              isBooked: true,
-            },
-          },
-        },
-      },
-      {
-        $set: selectedSeats.reduce((acc, seatNum) => {
-          // Find index in seatMatrix
-          const idx = show.seatMatrix.findIndex((s) => s.seatNumber === seatNum);
-          if (idx !== -1) {
-            acc[`seatMatrix.${idx}.isBooked`] = true;
-            acc[`seatMatrix.${idx}.bookedBy`] = req.user._id;
-            acc[`seatMatrix.${idx}.bookingReference`] = bookingRef;
-          }
-          return acc;
-        }, {}),
-        $inc: { availableSeats: -selectedSeats.length },
-      },
-      { new: true }
-    );
-
-    if (!atomicUpdateResult) {
-      return res.status(409).json({
-        success: false,
-        message: 'Conflict detected: One or more selected seats were locked by another user just now. Please try again.',
-      });
-    }
-
-    // 4. Calculate pricing directly from backend seat configurations
-    const seatDetails = requestedSeatObjects.map((s) => ({
-      seatNumber: s.seatNumber,
-      tier: s.tier,
-      price: s.price,
-    }));
-
-    const subtotal = seatDetails.reduce((sum, s) => sum + s.price, 0);
-    // Standard convenience fee: ₹25 flat per ticket + GST
-    const convenienceFee = Math.round(selectedSeats.length * 28);
-    const totalAmount = subtotal + convenienceFee;
-
-    // 5. Create Booking Record
-    const booking = await Booking.create({
-      bookingReference: bookingRef,
-      user: req.user._id,
-      movie: show.movie._id,
-      theater: show.theater._id,
-      show: show._id,
-      movieTitle: show.movie.title,
-      theaterName: show.theater.name,
-      theaterCity: show.theater.city,
-      screenName: show.screenName,
-      showDate: show.showDate,
-      showTime: show.showTime,
-      seats: selectedSeats,
-      seatDetails,
-      ticketCount: selectedSeats.length,
-      subtotal,
-      convenienceFee,
-      totalAmount,
-      paymentStatus: 'completed',
-      paymentMethod: paymentMethod || 'UPI',
-      paymentId: simPaymentId,
-      bookingStatus: 'confirmed',
     });
 
-    const populatedBooking = await Booking.findById(booking._id)
-      .populate('movie', 'title posterUrl duration language censorRating')
-      .populate('theater', 'name location city address')
-      .populate('user', 'name email phone');
+    if (conflicts.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: conflicts.join(', '),
+      });
+    }
 
-    return res.status(201).json({
+    // 3. Apply lock
+    selectedSeats.forEach((seatNum) => {
+      if (show.tickets && show.tickets[seatNum]) {
+        show.tickets[seatNum].status = 'locked';
+        show.tickets[seatNum].lockedBy = email;
+        show.tickets[seatNum].lockExpiresAt = lockExpiresAt;
+      }
+    });
+
+    // Save show changes
+    try {
+      if (typeof show.save === 'function') {
+        show.markModified && show.markModified('tickets');
+        await show.save();
+      }
+    } catch (e) {
+      // In-memory fallback
+    }
+
+    return res.json({
       success: true,
-      message: 'Tickets booked successfully!',
-      booking: populatedBooking,
+      message: `Seats locked for ${ttlMinutes} minutes. Complete checkout before timer expires.`,
+      lockExpiresAt,
+      selectedSeats,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get current user's bookings
+// @desc    Unlock Seats (deselection or cancellation)
+// @route   POST /api/bookings/unlock
+// @access  Public / Private
+const unlockSeats = async (req, res, next) => {
+  try {
+    const { showId, selectedSeats, userEmail } = req.body;
+    const email = userEmail || req.user?.email;
+
+    let show = null;
+    try {
+      show = await Show.findById(showId);
+      if (!show) show = await Show.findOne({ showId });
+    } catch (e) {
+      show = store.shows.find(s => s._id === showId || s.showId === showId);
+    }
+    if (!show) {
+      show = store.shows.find(s => s._id === showId || s.showId === showId);
+    }
+
+    if (!show || !show.tickets) {
+      return res.json({ success: true, message: 'No action needed' });
+    }
+
+    const seatsToUnlock = selectedSeats && selectedSeats.length > 0
+      ? selectedSeats
+      : Object.keys(show.tickets);
+
+    seatsToUnlock.forEach((seatNum) => {
+      const seat = show.tickets[seatNum];
+      if (seat && seat.status === 'locked') {
+        if (!email || seat.lockedBy === email) {
+          seat.status = 'available';
+          seat.lockedBy = null;
+          seat.lockExpiresAt = null;
+        }
+      }
+    });
+
+    try {
+      if (typeof show.save === 'function') {
+        show.markModified && show.markModified('tickets');
+        await show.save();
+      }
+    } catch (e) {}
+
+    return res.json({
+      success: true,
+      message: 'Seats unlocked',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Confirm booking (Simulated Checkout)
+// @route   POST /api/bookings
+// @access  Private / Authenticated
+const createBooking = async (req, res, next) => {
+  try {
+    const {
+      showId,
+      selectedSeats,
+      userEmail,
+      totalAmount,
+      subtotal,
+      convenienceFee,
+      paymentMethod,
+    } = req.body;
+
+    const email = (userEmail || req.user?.email || '').trim().toLowerCase();
+
+    if (!showId || !selectedSeats || !Array.isArray(selectedSeats) || selectedSeats.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid show ID and selected seats are required',
+      });
+    }
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'User email is required to confirm booking',
+      });
+    }
+
+    // Find show
+    let show = null;
+    try {
+      show = await Show.findById(showId);
+      if (!show) show = await Show.findOne({ showId });
+    } catch (e) {
+      show = store.shows.find(s => s._id === showId || s.showId === showId);
+    }
+    if (!show) {
+      show = store.shows.find(s => s._id === showId || s.showId === showId);
+    }
+
+    if (!show) {
+      return res.status(404).json({ success: false, message: 'Show not found' });
+    }
+
+    // Clean expired locks
+    cleanShowSeatLocks(show);
+
+    // Verify seats
+    const seatDetails = [];
+    const invalidSeats = [];
+
+    selectedSeats.forEach((seatNum) => {
+      const seat = show.tickets ? show.tickets[seatNum] : null;
+      if (!seat) {
+        invalidSeats.push(`Seat ${seatNum} does not exist`);
+        return;
+      }
+      if (seat.status === 'booked') {
+        invalidSeats.push(`Seat ${seatNum} is already booked`);
+      } else if (seat.status === 'locked' && seat.lockedBy !== email) {
+        invalidSeats.push(`Seat ${seatNum} is locked by another customer`);
+      } else {
+        seatDetails.push({
+          seatNumber: seat.seatNumber,
+          tier: seat.tier,
+          price: seat.price,
+        });
+      }
+    });
+
+    if (invalidSeats.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: invalidSeats.join(', '),
+      });
+    }
+
+    // Mark seats as booked
+    selectedSeats.forEach((seatNum) => {
+      show.tickets[seatNum].status = 'booked';
+      show.tickets[seatNum].lockedBy = email;
+      show.tickets[seatNum].lockExpiresAt = null;
+    });
+
+    try {
+      if (typeof show.save === 'function') {
+        show.markModified && show.markModified('tickets');
+        await show.save();
+      }
+    } catch (e) {}
+
+    // Calculate amounts if not supplied
+    const calculatedSubtotal = subtotal || seatDetails.reduce((sum, s) => sum + (s.price || 200), 0);
+    const calculatedFee = convenienceFee !== undefined ? convenienceFee : Math.round(selectedSeats.length * 28);
+    const calculatedTotal = totalAmount || (calculatedSubtotal + calculatedFee);
+
+    const bookingId = `IMV-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+    // Get movie & theatre names
+    const m = store.movies.find(x => String(x._id) === String(show.movieId));
+    const movieName = show.movieName || (m ? (m.movieName || m.title) : 'Movie Feature');
+    const theatreName = show.theatreName || 'iMovies Prime Multiplex';
+
+    const bookingPayload = {
+      bookingId,
+      userEmail: email,
+      showId: show.showId || show._id,
+      movieName,
+      theatreName,
+      showDate: show.showDate ? new Date(show.showDate).toISOString().split('T')[0] : 'Today',
+      showTime: show.showTime,
+      selectedSeats,
+      seatDetails,
+      subtotal: calculatedSubtotal,
+      convenienceFee: calculatedFee,
+      totalAmount: calculatedTotal,
+      paymentStatus: 'Completed',
+      paymentMethod: paymentMethod || 'Prime Pay / UPI',
+      paymentId: `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      createdAt: new Date(),
+    };
+
+    let booking = null;
+    try {
+      booking = await Booking.create(bookingPayload);
+    } catch (e) {
+      booking = {
+        _id: 'bkg_' + Date.now(),
+        ...bookingPayload,
+      };
+      store.bookings.unshift(booking);
+    }
+
+    // Send transactional booking confirmation email via Brevo
+    try {
+      emailService.sendBookingConfirmationEmail(email, {
+        ...bookingPayload,
+        bookingId,
+      }).catch((mailErr) => console.warn('[Booking Controller] Brevo email notice:', mailErr.message));
+    } catch (mailErr) {}
+
+    return res.status(201).json({
+      success: true,
+      message: 'Tickets booked successfully! A digital copy has been sent to your email.',
+      booking,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get user's booking history
 // @route   GET /api/bookings/my-bookings
 // @access  Private
 const getMyBookings = async (req, res, next) => {
   try {
-    const bookings = await Booking.find({ user: req.user._id })
-      .populate('movie', 'title posterUrl duration language censorRating')
-      .populate('theater', 'name location city address')
-      .sort({ createdAt: -1 });
+    const email = (req.user?.email || '').toLowerCase().trim();
+
+    let bookings = [];
+    try {
+      bookings = await Booking.find({ userEmail: email }).sort({ createdAt: -1 });
+    } catch (e) {
+      bookings = store.bookings.filter(b => b.userEmail && b.userEmail.toLowerCase() === email);
+    }
+
+    if (!bookings || bookings.length === 0) {
+      bookings = store.bookings.filter(b => b.userEmail && b.userEmail.toLowerCase() === email);
+    }
 
     return res.json({
       success: true,
@@ -172,103 +337,135 @@ const getMyBookings = async (req, res, next) => {
   }
 };
 
-// @desc    Get single booking details
-// @route   GET /api/bookings/:id
-// @access  Private
-const getBookingById = async (req, res, next) => {
+// @desc    Get all bookings (Admin moderation)
+// @route   GET /api/bookings
+// @access  Private/Admin
+const getAllBookings = async (req, res, next) => {
   try {
-    const booking = await Booking.findById(req.params.id)
-      .populate('movie')
-      .populate('theater')
-      .populate('user', 'name email phone');
-
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found',
-      });
+    let bookings = [];
+    try {
+      bookings = await Booking.find().sort({ createdAt: -1 });
+    } catch (e) {
+      bookings = store.bookings;
     }
 
-    // Only owner or admin can view
-    if (
-      booking.user._id.toString() !== req.user._id.toString() &&
-      req.user.role !== 'admin'
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to view this booking',
-      });
+    if (!bookings || bookings.length === 0) {
+      bookings = store.bookings;
     }
 
     return res.json({
       success: true,
-      booking,
+      count: bookings.length,
+      bookings,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Cancel a booking and release seats
+// @desc    Get single booking by ID
+// @route   GET /api/bookings/:id
+// @access  Private
+const getBookingById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    let booking = null;
+
+    try {
+      booking = await Booking.findById(id);
+      if (!booking) booking = await Booking.findOne({ bookingId: id });
+    } catch (e) {
+      booking = store.bookings.find(b => b._id === id || b.bookingId === id);
+    }
+
+    if (!booking) {
+      booking = store.bookings.find(b => b._id === id || b.bookingId === id);
+    }
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    return res.json({ success: true, booking });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Cancel booking
 // @route   PUT /api/bookings/:id/cancel
 // @access  Private
 const cancelBooking = async (req, res, next) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    const { id } = req.params;
+    let booking = null;
+
+    try {
+      booking = await Booking.findById(id);
+      if (!booking) booking = await Booking.findOne({ bookingId: id });
+    } catch (e) {
+      booking = store.bookings.find(b => b._id === id || b.bookingId === id);
+    }
+    if (!booking) {
+      booking = store.bookings.find(b => b._id === id || b.bookingId === id);
+    }
 
     if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: 'Booking not found',
-      });
+      return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    // Only owner or admin can cancel
-    if (
-      booking.user.toString() !== req.user._id.toString() &&
-      req.user.role !== 'admin'
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to cancel this booking',
-      });
+    booking.paymentStatus = 'Cancelled';
+
+    // Release seats in show
+    let show = null;
+    try {
+      show = await Show.findById(booking.showId);
+      if (!show) show = await Show.findOne({ showId: booking.showId });
+    } catch (e) {
+      show = store.shows.find(s => s._id === booking.showId || s.showId === booking.showId);
+    }
+    if (!show) {
+      show = store.shows.find(s => s._id === booking.showId || s.showId === booking.showId);
     }
 
-    if (booking.bookingStatus === 'cancelled') {
-      return res.status(400).json({
-        success: false,
-        message: 'Booking has already been cancelled',
-      });
-    }
-
-    // 1. Mark booking as cancelled
-    booking.bookingStatus = 'cancelled';
-    booking.paymentStatus = 'refunded';
-    booking.cancelledAt = new Date();
-    await booking.save();
-
-    // 2. Release seats in Show atomically
-    const show = await Show.findById(booking.show);
-    if (show) {
-      const updateFields = {};
-      booking.seats.forEach((seatNum) => {
-        const idx = show.seatMatrix.findIndex((s) => s.seatNumber === seatNum);
-        if (idx !== -1) {
-          updateFields[`seatMatrix.${idx}.isBooked`] = false;
-          updateFields[`seatMatrix.${idx}.bookedBy`] = null;
-          updateFields[`seatMatrix.${idx}.bookingReference`] = null;
+    if (show && show.tickets && booking.selectedSeats) {
+      booking.selectedSeats.forEach((seatNum) => {
+        if (show.tickets[seatNum]) {
+          show.tickets[seatNum].status = 'available';
+          show.tickets[seatNum].lockedBy = null;
+          show.tickets[seatNum].lockExpiresAt = null;
         }
       });
-
-      await Show.findByIdAndUpdate(booking.show, {
-        $set: updateFields,
-        $inc: { availableSeats: booking.seats.length },
-      });
+      try {
+        if (typeof show.save === 'function') {
+          show.markModified && show.markModified('tickets');
+          await show.save();
+        }
+      } catch (e) {}
     }
+
+    try {
+      if (typeof booking.save === 'function') {
+        await booking.save();
+      }
+    } catch (e) {}
+
+    // Send status update notification via Brevo
+    try {
+      if (booking.userEmail) {
+        emailService.sendBookingStatusUpdateEmail(booking.userEmail, {
+          bookingId: booking.bookingId,
+          status: 'Cancelled',
+          movieName: booking.movieName,
+          refundAmount: booking.totalAmount,
+          notes: 'Your ticket reservation has been cancelled and seats have been restored. Full refund processed.',
+        }).catch((err) => console.warn('[Booking Controller] Cancellation email notice:', err.message));
+      }
+    } catch (mailErr) {}
 
     return res.json({
       success: true,
-      message: 'Booking cancelled successfully. Seats have been released and refund initiated.',
+      message: 'Booking cancelled and seats released successfully',
       booking,
     });
   } catch (error) {
@@ -277,8 +474,11 @@ const cancelBooking = async (req, res, next) => {
 };
 
 module.exports = {
+  lockSeats,
+  unlockSeats,
   createBooking,
   getMyBookings,
+  getAllBookings,
   getBookingById,
   cancelBooking,
 };

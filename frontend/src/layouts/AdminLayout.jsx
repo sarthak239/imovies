@@ -1,138 +1,118 @@
-import React from 'react';
-import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import {
-  FaTachometerAlt,
-  FaFilm,
-  FaBuilding,
-  FaCalendarAlt,
-  FaTicketAlt,
-  FaArrowLeft,
-  FaSignOutAlt,
-  FaShieldAlt,
-} from 'react-icons/fa';
+  LayoutDashboard, Film, Building2, Calendar,
+  Ticket, LogOut, Menu, X, Clapperboard, Shield,
+} from 'lucide-react';
 
-const AdminLayout = () => {
+const NAV = [
+  { to: '/admin',         icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/addmovie',      icon: Film,            label: 'Add Movie' },
+  { to: '/addtheatre',    icon: Building2,        label: 'Add Theatre' },
+  { to: '/addshow',       icon: Calendar,         label: 'Add Show' },
+  { to: '/adminbookings', icon: Ticket,           label: 'All Bookings' },
+];
+
+export default function AdminLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/admin/login');
-  };
+  const handleLogout = () => { logout(); navigate('/landing'); };
 
-  return (
-    <div className="d-flex flex-column min-vh-100" style={{ backgroundColor: '#090a10' }}>
-      {/* Admin Top Header */}
-      <header className="border-bottom border-secondary py-3 px-4 bg-dark d-flex align-items-center justify-content-between">
-        <div className="d-flex align-items-center gap-3">
-          <Link to="/" className="brand-logo text-decoration-none">
-            <div
-              className="d-flex align-items-center justify-content-center rounded-2"
-              style={{
-                width: '32px',
-                height: '32px',
-                background: 'var(--imv-primary)',
-              }}
-            >
-              <FaFilm color="#fff" size={16} />
-            </div>
-            <span className="fs-5">
-              i<span style={{ color: 'var(--imv-primary)' }}>Movies</span>
-            </span>
-          </Link>
-          <span className="badge bg-warning text-dark fw-bold px-2 py-1">
-            <FaShieldAlt className="me-1" /> Admin Console
-          </span>
-        </div>
-
-        <div className="d-flex align-items-center gap-3">
-          <Link to="/" className="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
-            <FaArrowLeft size={11} /> View Live Website
-          </Link>
-          <div className="d-none d-sm-block text-end">
-            <div className="text-white small fw-bold">{user?.name}</div>
-            <div className="text-muted" style={{ fontSize: '0.72rem' }}>
-              Master Admin
-            </div>
+  const Sidebar = ({ mobile = false }) => (
+    <div className={`flex flex-col ${mobile ? 'h-full' : 'h-screen sticky top-0'}`}
+         style={{ width: mobile ? '100%' : '220px', background: '#0a1118', borderRight: '1px solid #1a242f' }}>
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-[#1a242f]">
+        <Link to="/admin" onClick={() => setSidebarOpen(false)}
+          className="flex items-center gap-2 no-underline">
+          <div className="w-7 h-7 rounded flex items-center justify-center"
+               style={{ background: 'linear-gradient(135deg,#00a8e1,#0067a3)' }}>
+            <Clapperboard size={14} color="#fff" />
           </div>
-          <button
-            onClick={handleLogout}
-            className="btn btn-outline-danger btn-sm d-flex align-items-center gap-1"
-          >
-            <FaSignOutAlt size={12} /> Sign Out
-          </button>
+          <span className="text-base font-black text-white">
+            i<span style={{ color: '#00a8e1' }}>Movies</span>
+          </span>
+        </Link>
+        <div className="flex items-center gap-1 mt-1.5">
+          <Shield size={10} className="text-yellow-400" />
+          <span className="text-[10px] font-bold text-yellow-400 uppercase tracking-widest">Admin Console</span>
         </div>
-      </header>
+      </div>
 
-      {/* Admin Body with Sidebar and Main View */}
-      <div className="container-fluid flex-grow-1">
-        <div className="row">
-          {/* Sidebar */}
-          <aside className="col-lg-2 col-md-3 admin-sidebar py-4 px-3 border-end border-secondary">
-            <div className="text-uppercase text-secondary small fw-bold px-3 mb-3">
-              Navigation
-            </div>
-            <nav className="d-flex flex-column gap-1">
-              <NavLink
-                to="/admin/dashboard"
-                end
-                className={({ isActive }) =>
-                  `admin-nav-item text-decoration-none ${isActive ? 'active' : ''}`
-                }
-              >
-                <FaTachometerAlt size={16} /> Dashboard
-              </NavLink>
-              <NavLink
-                to="/admin/movies"
-                className={({ isActive }) =>
-                  `admin-nav-item text-decoration-none ${isActive ? 'active' : ''}`
-                }
-              >
-                <FaFilm size={16} /> Movies
-              </NavLink>
-              <NavLink
-                to="/admin/theaters"
-                className={({ isActive }) =>
-                  `admin-nav-item text-decoration-none ${isActive ? 'active' : ''}`
-                }
-              >
-                <FaBuilding size={16} /> Theaters
-              </NavLink>
-              <NavLink
-                to="/admin/shows"
-                className={({ isActive }) =>
-                  `admin-nav-item text-decoration-none ${isActive ? 'active' : ''}`
-                }
-              >
-                <FaCalendarAlt size={16} /> Shows
-              </NavLink>
-              <NavLink
-                to="/admin/bookings"
-                className={({ isActive }) =>
-                  `admin-nav-item text-decoration-none ${isActive ? 'active' : ''}`
-                }
-              >
-                <FaTicketAlt size={16} /> Bookings
-              </NavLink>
-            </nav>
+      {/* Nav links */}
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {NAV.map(({ to, icon: Icon, label }) => {
+          const active = location.pathname === to;
+          return (
+            <Link key={to} to={to} onClick={() => setSidebarOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold no-underline transition-all ${
+                active
+                  ? 'text-white bg-[#1a242f] border-l-2 border-[#00a8e1] pl-[10px]'
+                  : 'text-[#4a6275] hover:text-white hover:bg-[#1a242f]'
+              }`}>
+              <Icon size={16} style={{ color: active ? '#00a8e1' : undefined }} />
+              {label}
+            </Link>
+          );
+        })}
+      </nav>
 
-            <div className="mt-5 p-3 rounded-3 bg-dark border border-secondary text-secondary small">
-              <div className="text-white fw-bold mb-1">System Status</div>
-              <div>Database: <span className="text-success fw-bold">Connected</span></div>
-              <div>Port: 5000 (REST)</div>
-              <div>Node: v24 / MERN</div>
-            </div>
-          </aside>
-
-          {/* Main Content View */}
-          <main className="col-lg-10 col-md-9 py-4 px-md-5">
-            <Outlet />
-          </main>
+      {/* User info + logout */}
+      <div className="px-4 py-4 border-t border-[#1a242f]">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
+               style={{ background: '#00a8e1' }}>
+            {(user?.name || user?.username || 'A')[0].toUpperCase()}
+          </div>
+          <div className="overflow-hidden">
+            <p className="text-xs font-bold text-white truncate">{user?.name || user?.username}</p>
+            <p className="text-[10px] text-[#4a6275] truncate">{user?.email}</p>
+          </div>
         </div>
+        <button onClick={handleLogout}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-[#1a242f] transition-colors text-left">
+          <LogOut size={14} /> Sign Out
+        </button>
       </div>
     </div>
   );
-};
 
-export default AdminLayout;
+  return (
+    <div className="flex min-h-screen" style={{ background: '#0f171e' }}>
+      {/* Desktop sidebar */}
+      <div className="hidden lg:flex">
+        <Sidebar />
+      </div>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div className="w-64 h-full"><Sidebar mobile /></div>
+          <div className="flex-1 bg-black/60" onClick={() => setSidebarOpen(false)} />
+        </div>
+      )}
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top bar (mobile) */}
+        <div className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-[#1a242f]"
+             style={{ background: '#0a1118' }}>
+          <button onClick={() => setSidebarOpen(true)} className="text-white p-1">
+            <Menu size={20} />
+          </button>
+          <span className="text-sm font-bold text-white">Admin Console</span>
+          <div className="w-7" />
+        </div>
+
+        <main className="flex-1 p-4 md:p-8">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}

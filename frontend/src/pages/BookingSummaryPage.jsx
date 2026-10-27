@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { bookingService } from '../services/bookingService';
+import { paymentService } from '../services/paymentService';
 import { useAuth } from '../context/AuthContext';
 import {
   FaTicketAlt,
@@ -68,28 +69,98 @@ const BookingSummaryPage = () => {
       setProcessing(true);
       setErrorMessage('');
 
-      const payload = {
+      // Load Razorpay Checkout SDK
+      const isLoaded = await paymentService.loadScript();
+      if (!isLoaded) {
+        throw new Error('Unable to connect to Razorpay payment gateway.');
+      }
+
+      // Step 1: Create Order
+      const orderData = await paymentService.createOrder({
+        amount: totalAmount,
         showId,
         selectedSeats,
-        paymentMethod,
-        paymentDetails: {
-          simulatedMethod: paymentMethod,
-          mockIdentifier: paymentMethod === 'UPI' ? upiId : cardNumber,
+        userEmail: user?.email,
+      });
+
+      if (!orderData?.success || !orderData?.order_id) {
+        throw new Error(orderData?.message || 'Failed to initialize payment order');
+      }
+
+      // Step 2: Configure Razorpay Options
+      const options = {
+        key: orderData.key_id || orderData.keyId,
+        amount: orderData.amount,
+        currency: 'INR',
+        name: 'iMovies Ticket Booking',
+        description: `${movie?.movieName || 'Movie Feature'} (${selectedSeats.join(', ')})`,
+        image: movie?.posterUrl || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=200&auto=format&fit=crop',
+        order_id: orderData.order_id,
+        handler: async function (response) {
+          try {
+            setProcessing(true);
+            const verifyRes = await paymentService.verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              bookingDetails: {
+                showId,
+                selectedSeats,
+                userEmail: user?.email,
+                movieName: movie?.movieName,
+                theatreName: theater?.theatreName,
+                showDate,
+                showTime,
+                subtotal,
+                convenienceFee,
+                totalAmount,
+              },
+            });
+
+            if (verifyRes?.success && verifyRes?.booking) {
+              setBookingSuccess(verifyRes.booking);
+            } else {
+              setErrorMessage(verifyRes?.message || 'Payment signature verification failed.');
+            }
+          } catch (vErr) {
+            setErrorMessage(vErr.response?.data?.message || 'Payment verification failed');
+          } finally {
+            setProcessing(false);
+          }
+        },
+        prefill: {
+          name: user?.name || user?.username || 'iMovies Viewer',
+          email: user?.email,
+          contact: '9999999999',
+        },
+        theme: {
+          color: '#E50914',
+        },
+        modal: {
+          ondismiss: async function () {
+            await paymentService.cancelPayment({
+              showId,
+              selectedSeats,
+              userEmail: user?.email,
+            });
+            setProcessing(false);
+          },
         },
       };
 
-      const res = await bookingService.createBooking(payload);
-
-      if (res?.success && res?.booking) {
-        setBookingSuccess(res.booking);
-      }
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        setErrorMessage(resp.error?.description || 'Transaction declined');
+        setProcessing(false);
+      });
+      rzp.open();
     } catch (err) {
       console.error('Booking confirmation failed:', err);
       const msg =
         err.response?.data?.message ||
+        err.message ||
         'Booking transaction could not be completed. Please try again.';
       setErrorMessage(msg);
-    } finally {
       setProcessing(false);
     }
   };

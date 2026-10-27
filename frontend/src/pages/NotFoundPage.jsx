@@ -1,35 +1,21 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FaFilm, FaHome, FaCompass } from 'react-icons/fa';
+import { Film, ArrowLeft } from 'lucide-react';
 
-const NotFoundPage = () => {
+export default function NotFoundPage() {
   return (
-    <div className="container py-5 text-center my-auto">
-      <div className="py-5">
-        <div
-          className="d-inline-flex p-4 rounded-circle mb-4 text-danger"
-          style={{ backgroundColor: 'rgba(229, 9, 20, 0.15)', border: '1px solid rgba(229, 9, 20, 0.3)' }}
-        >
-          <FaFilm size={54} />
-        </div>
-
-        <h1 className="display-1 fw-black text-danger mb-2 font-monospace">404</h1>
-        <h3 className="text-white fw-bold mb-2">Lost in the Reels?</h3>
-        <p className="text-secondary small mb-4" style={{ maxWidth: '450px', margin: '0 auto' }}>
-          The scene or page you are looking for has been cut from the final screening or doesn't exist.
-        </p>
-
-        <div className="d-flex justify-content-center gap-3">
-          <Link to="/" className="btn btn-cinema d-flex align-items-center gap-2">
-            <FaHome size={14} /> Return to Home
-          </Link>
-          <Link to="/movies" className="btn btn-cinema-outline d-flex align-items-center gap-2">
-            <FaCompass size={14} /> Explore Movies
-          </Link>
-        </div>
+    <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 text-center">
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-[#1a242f] border border-[#2c3e50] text-[#00a8e1] mb-4 shadow-xl">
+        <Film size={32} />
       </div>
+      <h1 className="text-4xl sm:text-5xl font-black text-white mb-2">404</h1>
+      <h2 className="text-xl font-bold text-white mb-2">Feature Reel Not Found</h2>
+      <p className="text-sm text-[#8ea3b0] max-w-md mb-6">
+        The cinema screen or page you are trying to reach does not exist or has moved.
+      </p>
+      <Link to="/home" className="btn-prime text-sm px-6 py-2.5 rounded-md font-bold no-underline">
+        <ArrowLeft size={16} /> Return to Home
+      </Link>
     </div>
   );
-};
-
-export default NotFoundPage;
+}

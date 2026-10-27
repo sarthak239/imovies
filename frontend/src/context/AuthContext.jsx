@@ -1,108 +1,105 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('imovies_token') || null);
+  const [user, setUser]       = useState(null);
+  const [token, setToken]     = useState(() => localStorage.getItem('imovies_token'));
   const [loading, setLoading] = useState(true);
 
-  // Initialize auth state
   useEffect(() => {
-    const initializeAuth = async () => {
+    const init = async () => {
       const storedToken = localStorage.getItem('imovies_token');
-      const storedUser = localStorage.getItem('imovies_user');
-
+      const storedUser  = localStorage.getItem('imovies_user');
       if (storedToken && storedUser) {
         try {
           setUser(JSON.parse(storedUser));
           setToken(storedToken);
-
-          // Verify with backend
           const res = await api.get('/auth/profile');
           if (res.data?.user) {
             setUser(res.data.user);
             localStorage.setItem('imovies_user', JSON.stringify(res.data.user));
           }
-        } catch (error) {
-          console.warn('[AuthContext] Session expired or invalid:', error.message);
-          logout();
+        } catch {
+          _clear();
         }
       }
       setLoading(false);
     };
-
-    initializeAuth();
+    init();
   }, []);
 
-  const login = async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    if (response.data?.success) {
-      const { token: receivedToken, user: receivedUser } = response.data;
-      setToken(receivedToken);
-      setUser(receivedUser);
-      localStorage.setItem('imovies_token', receivedToken);
-      localStorage.setItem('imovies_user', JSON.stringify(receivedUser));
-      return response.data;
-    }
-    throw new Error(response.data?.message || 'Login failed');
+  const _persist = (tkn, usr) => {
+    setToken(tkn); setUser(usr);
+    localStorage.setItem('imovies_token', tkn);
+    localStorage.setItem('imovies_user', JSON.stringify(usr));
   };
 
-  const register = async (userData) => {
-    const response = await api.post('/auth/register', userData);
-    if (response.data?.success) {
-      const { token: receivedToken, user: receivedUser } = response.data;
-      setToken(receivedToken);
-      setUser(receivedUser);
-      localStorage.setItem('imovies_token', receivedToken);
-      localStorage.setItem('imovies_user', JSON.stringify(receivedUser));
-      return response.data;
-    }
-    throw new Error(response.data?.message || 'Registration failed');
-  };
-
-  const logout = () => {
-    setUser(null);
-    setToken(null);
+  const _clear = () => {
+    setToken(null); setUser(null);
     localStorage.removeItem('imovies_token');
     localStorage.removeItem('imovies_user');
   };
 
-  const updateProfile = async (profileData) => {
-    const response = await api.put('/auth/profile', profileData);
-    if (response.data?.success) {
-      const { user: updatedUser, token: refreshedToken } = response.data;
-      setUser(updatedUser);
-      localStorage.setItem('imovies_user', JSON.stringify(updatedUser));
-      if (refreshedToken) {
-        setToken(refreshedToken);
-        localStorage.setItem('imovies_token', refreshedToken);
+  const login = async (email, password) => {
+    const res = await api.post('/auth/login', { email, password });
+    if (res.data?.success) { _persist(res.data.token, res.data.user); return res.data; }
+    throw new Error(res.data?.message || 'Login failed');
+  };
+
+  const register = async (userData) => {
+    const res = await api.post('/auth/register', userData);
+    if (res.data?.success) {
+      if (res.data.token && res.data.user) {
+        _persist(res.data.token, res.data.user);
       }
-      return response.data;
+      return res.data;
     }
-    throw new Error(response.data?.message || 'Failed to update profile');
+    throw new Error(res.data?.message || 'Registration failed');
   };
 
-  const value = {
-    user,
-    token,
-    loading,
-    isAuthenticated: !!token && !!user,
-    isAdmin: user?.role === 'admin',
-    login,
-    register,
-    logout,
-    updateProfile,
+  const verifyOtp = async (email, otp) => {
+    const res = await api.post('/auth/verify-otp', { email, otp });
+    if (res.data?.success && res.data.token && res.data.user) {
+      _persist(res.data.token, res.data.user);
+      return res.data;
+    }
+    throw new Error(res.data?.message || 'OTP verification failed');
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const resendOtp = async (email) => {
+    const res = await api.post('/auth/resend-otp', { email });
+    return res.data;
+  };
+
+  const forgotPassword = async (email) => {
+    const res = await api.post('/auth/forgot-password', { email });
+    return res.data;
+  };
+
+  const resetPassword = async ({ email, otp, token, newPassword }) => {
+    const res = await api.post('/auth/reset-password', { email, otp, token, newPassword });
+    return res.data;
+  };
+
+  const logout = () => _clear();
+
+  return (
+    <AuthContext.Provider value={{
+      user, token, loading,
+      isAuthenticated: !!token && !!user,
+      isAdmin: user?.role === 'admin',
+      login, register, logout,
+      verifyOtp, resendOtp, forgotPassword, resetPassword,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  return ctx;
 };

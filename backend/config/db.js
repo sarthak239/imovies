@@ -1,15 +1,30 @@
 const mongoose = require('mongoose');
+const store = require('./store');
+
+let isMongoConnected = false;
 
 const connectDB = async () => {
+  const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/imovies_db';
+
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000,
+    const conn = await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 2000,
     });
-    console.log(`[iMovies Backend] MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
+    isMongoConnected = true;
+    console.log(`[iMovies Database] MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
   } catch (error) {
-    console.error(`[iMovies Backend] MongoDB Connection Error: ${error.message}`);
-    process.exit(1);
+    isMongoConnected = false;
+    console.log(`[iMovies Database] MongoDB service unavailable (${error.message}).`);
+    console.log(`[iMovies Database] Activating resilient in-memory data store with live TTL locking.`);
+    await store.init();
   }
+
+  // Periodic Seat Lock TTL cleanup every 15 seconds
+  setInterval(() => {
+    store.cleanExpiredLocks();
+  }, 15000);
 };
 
-module.exports = connectDB;
+const getDBStatus = () => isMongoConnected;
+
+module.exports = { connectDB, getDBStatus, store };

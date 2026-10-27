@@ -1,48 +1,79 @@
-const Movie = require('../models/Movie');
-const Theater = require('../models/Theater');
-const Show = require('../models/Show');
-const Booking = require('../models/Booking');
-const User = require('../models/User');
+const store = require('../config/store');
+const Movie = require('../models/movieModel');
+const Theatre = require('../models/theatreModel');
+const Show = require('../models/showModel');
+const Booking = require('../models/bookingModel');
+const User = require('../models/userModel');
 
 // @desc    Get Admin Dashboard Key Metrics & Statistics
 // @route   GET /api/admin/dashboard-stats
 // @access  Private/Admin
 const getDashboardStats = async (req, res, next) => {
   try {
-    const [
-      totalMovies,
-      totalTheaters,
-      totalShows,
-      totalUsers,
-      totalBookings,
-      revenueResult,
-      recentBookings,
-    ] = await Promise.all([
-      Movie.countDocuments(),
-      Theater.countDocuments(),
-      Show.countDocuments(),
-      User.countDocuments({ role: 'user' }),
-      Booking.countDocuments(),
-      Booking.aggregate([
-        { $match: { bookingStatus: 'confirmed' } },
+    let totalMovies = 0;
+    let totalTheaters = 0;
+    let totalShows = 0;
+    let totalUsers = 0;
+    let totalBookings = 0;
+    let totalRevenue = 0;
+    let totalTicketsSold = 0;
+    let recentBookings = [];
+
+    try {
+      [totalMovies, totalTheaters, totalShows, totalUsers, totalBookings] = await Promise.all([
+        Movie.countDocuments(),
+        Theatre.countDocuments(),
+        Show.countDocuments(),
+        User.countDocuments({ role: 'user' }),
+        Booking.countDocuments(),
+      ]);
+
+      const rev = await Booking.aggregate([
+        { $match: { paymentStatus: 'Completed' } },
         {
           $group: {
             _id: null,
             totalRevenue: { $sum: '$totalAmount' },
-            totalTickets: { $sum: '$ticketCount' },
+            totalTickets: { $sum: { $size: '$selectedSeats' } },
           },
         },
-      ]),
-      Booking.find()
-        .populate('user', 'name email phone')
-        .populate('movie', 'title posterUrl')
-        .populate('theater', 'name city')
-        .sort({ createdAt: -1 })
-        .limit(8),
-    ]);
+      ]);
+      totalRevenue = rev[0]?.totalRevenue || 0;
+      totalTicketsSold = rev[0]?.totalTickets || 0;
 
-    const totalRevenue = revenueResult[0]?.totalRevenue || 0;
-    const totalTicketsSold = revenueResult[0]?.totalTickets || 0;
+      recentBookings = await Booking.find().sort({ createdAt: -1 }).limit(10);
+    } catch (e) {
+      // Store fallback
+      totalMovies = store.movies.length;
+      totalTheaters = store.theatres.length;
+      totalShows = store.shows.length;
+      totalUsers = store.users.length;
+      totalBookings = store.bookings.length;
+
+      store.bookings.forEach((b) => {
+        if (b.paymentStatus === 'Completed') {
+          totalRevenue += (b.totalAmount || 0);
+          totalTicketsSold += (b.selectedSeats ? b.selectedSeats.length : 1);
+        }
+      });
+
+      recentBookings = store.bookings.slice(0, 10);
+    }
+
+    if (totalMovies === 0 && store.movies.length > 0) {
+      totalMovies = store.movies.length;
+      totalTheaters = store.theatres.length;
+      totalShows = store.shows.length;
+      totalUsers = store.users.length;
+      totalBookings = store.bookings.length;
+      recentBookings = store.bookings.slice(0, 10);
+      store.bookings.forEach((b) => {
+        if (b.paymentStatus === 'Completed') {
+          totalRevenue += (b.totalAmount || 0);
+          totalTicketsSold += (b.selectedSeats ? b.selectedSeats.length : 1);
+        }
+      });
+    }
 
     return res.json({
       success: true,
@@ -68,25 +99,37 @@ const getDashboardStats = async (req, res, next) => {
 const getAllBookingsAdmin = async (req, res, next) => {
   try {
     const { search, status } = req.query;
-    let query = {};
+    let bookings = [];
 
-    if (status && status !== 'all') {
-      query.bookingStatus = status;
+    try {
+      let query = {};
+      if (status && status !== 'all') {
+        query.paymentStatus = status;
+      }
+      if (search) {
+        query.$or = [
+          { bookingId: { $regex: search, $options: 'i' } },
+          { userEmail: { $regex: search, $options: 'i' } },
+          { movieName: { $regex: search, $options: 'i' } },
+          { theatreName: { $regex: search, $options: 'i' } },
+        ];
+      }
+      bookings = await Booking.find(query).sort({ createdAt: -1 });
+    } catch (e) {
+      bookings = store.bookings.filter((b) => {
+        const sMatch = !status || status === 'all' || b.paymentStatus === status;
+        const qMatch = !search ||
+          (b.bookingId && b.bookingId.toLowerCase().includes(search.toLowerCase())) ||
+          (b.userEmail && b.userEmail.toLowerCase().includes(search.toLowerCase())) ||
+          (b.movieName && b.movieName.toLowerCase().includes(search.toLowerCase())) ||
+          (b.theatreName && b.theatreName.toLowerCase().includes(search.toLowerCase()));
+        return sMatch && qMatch;
+      });
     }
 
-    if (search) {
-      query.$or = [
-        { bookingReference: { $regex: search, $options: 'i' } },
-        { movieTitle: { $regex: search, $options: 'i' } },
-        { theaterName: { $regex: search, $options: 'i' } },
-      ];
+    if (!bookings || bookings.length === 0) {
+      bookings = store.bookings;
     }
-
-    const bookings = await Booking.find(query)
-      .populate('user', 'name email phone')
-      .populate('movie', 'title posterUrl')
-      .populate('theater', 'name city')
-      .sort({ createdAt: -1 });
 
     return res.json({
       success: true,

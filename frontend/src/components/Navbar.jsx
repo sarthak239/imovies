@@ -1,261 +1,162 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-  FaFilm,
-  FaTicketAlt,
-  FaUserCircle,
-  FaSignOutAlt,
-  FaShieldAlt,
-  FaBars,
-  FaTimes,
-  FaCompass,
-} from 'react-icons/fa';
+  Film, Ticket, User, LogOut, Shield, Menu, X,
+  Search, Heart, ChevronDown, Clapperboard,
+} from 'lucide-react';
 
-const Navbar = () => {
+export default function Navbar() {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [open, setOpen]       = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-    setMobileMenuOpen(false);
-  };
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const handleLogout = () => { logout(); navigate('/landing'); setOpen(false); setDropOpen(false); };
+
+  const navLinkCls = ({ isActive }) =>
+    `text-sm font-semibold transition-colors duration-150 hover:text-white ${isActive ? 'text-white' : 'text-[#8ea3b0]'}`;
 
   return (
-    <nav className="imv-navbar py-3">
-      <div className="container d-flex align-items-center justify-content-between">
-        {/* Brand Logo */}
-        <Link to="/" className="brand-logo" onClick={() => setMobileMenuOpen(false)}>
-          <div
-            className="d-flex align-items-center justify-content-center rounded-3"
-            style={{
-              width: '38px',
-              height: '38px',
-              background: 'linear-gradient(135deg, #e50914, #b20710)',
-              boxShadow: '0 0 15px rgba(229, 9, 20, 0.5)',
-            }}
-          >
-            <FaFilm size={20} color="#fff" />
+    <nav className={`imv-navbar transition-shadow duration-300 ${scrolled ? 'shadow-lg shadow-black/50' : ''}`}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14">
+
+        {/* Brand */}
+        <Link to="/home" onClick={() => setOpen(false)}
+          className="flex items-center gap-2 no-underline group">
+          <div className="w-8 h-8 rounded flex items-center justify-center"
+               style={{ background: 'linear-gradient(135deg,#00a8e1,#0067a3)' }}>
+            <Clapperboard size={16} color="#fff" />
           </div>
-          <span>
-            i<span style={{ color: 'var(--imv-primary)' }}>Movies</span>
+          <span className="text-lg font-black tracking-tight text-white">
+            i<span style={{ color: '#00a8e1' }}>Movies</span>
           </span>
-          <span className="brand-badge d-none d-sm-inline">Cinema</span>
         </Link>
 
-        {/* Desktop Navigation Links */}
-        <div className="d-none d-md-flex align-items-center gap-4">
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              `text-decoration-none fw-semibold transition-colors ${
-                isActive ? 'text-white' : 'text-secondary'
-              }`
-            }
-          >
-            Home
-          </NavLink>
-          <NavLink
-            to="/movies"
-            className={({ isActive }) =>
-              `text-decoration-none fw-semibold transition-colors ${
-                isActive ? 'text-white' : 'text-secondary'
-              }`
-            }
-          >
-            All Movies
-          </NavLink>
-          <NavLink
-            to="/theaters"
-            className={({ isActive }) =>
-              `text-decoration-none fw-semibold transition-colors ${
-                isActive ? 'text-white' : 'text-secondary'
-              }`
-            }
-          >
-            Theaters
-          </NavLink>
+        {/* Desktop nav links */}
+        <div className="hidden md:flex items-center gap-7">
+          <NavLink to="/home"       className={navLinkCls} end>Home</NavLink>
+          <NavLink to="/watchlist"  className={navLinkCls}>Watchlist</NavLink>
           {isAuthenticated && (
-            <NavLink
-              to="/my-bookings"
-              className={({ isActive }) =>
-                `text-decoration-none fw-semibold transition-colors d-flex align-items-center gap-1 ${
-                  isActive ? 'text-white' : 'text-secondary'
-                }`
-              }
-            >
-              <FaTicketAlt size={13} className="text-danger" /> My Bookings
+            <NavLink to="/bookings" className={navLinkCls}>My Bookings</NavLink>
+          )}
+          {isAdmin && (
+            <NavLink to="/admin" className={({ isActive }) =>
+              `text-sm font-semibold flex items-center gap-1 transition-colors ${isActive ? 'text-yellow-400' : 'text-yellow-500/70 hover:text-yellow-400'}`
+            }>
+              <Shield size={13} /> Admin
             </NavLink>
           )}
         </div>
 
-        {/* Right Action / Auth Buttons */}
-        <div className="d-none d-md-flex align-items-center gap-3">
-          {isAdmin && (
-            <Link
-              to="/admin/dashboard"
-              className="btn btn-sm btn-outline-warning d-flex align-items-center gap-1 px-3 py-1 rounded-pill"
-              style={{ fontSize: '0.82rem' }}
-            >
-              <FaShieldAlt size={12} /> Admin Portal
-            </Link>
-          )}
-
+        {/* Desktop right */}
+        <div className="hidden md:flex items-center gap-3">
           {isAuthenticated ? (
-            <div className="dropdown">
-              <button
-                className="btn btn-dark dropdown-toggle d-flex align-items-center gap-2 border-secondary bg-transparent px-3 py-2 rounded-pill"
-                type="button"
-                data-bs-toggle="dropdown"
-                aria-expanded="false"
-              >
-                <FaUserCircle size={18} className="text-danger" />
-                <span className="fw-semibold text-white" style={{ fontSize: '0.9rem' }}>
-                  {user?.name?.split(' ')[0] || 'My Account'}
-                </span>
+            <div className="relative">
+              <button onClick={() => setDropOpen(p => !p)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded border border-[#2c3e50] hover:border-[#00a8e1] transition-colors text-sm font-semibold text-white">
+                <User size={15} style={{ color: '#00a8e1' }} />
+                <span>{user?.name?.split(' ')[0] || user?.username || 'Me'}</span>
+                <ChevronDown size={13} className={`transition-transform ${dropOpen ? 'rotate-180' : ''}`} />
               </button>
-              <ul className="dropdown-menu dropdown-menu-dark dropdown-menu-end shadow-lg border-secondary">
-                <li className="px-3 py-2 border-bottom border-secondary mb-1">
-                  <div className="fw-bold text-white small">{user?.name}</div>
-                  <div className="text-muted text-truncate" style={{ fontSize: '0.75rem' }}>
-                    {user?.email}
+              {dropOpen && (
+                <div className="absolute right-0 mt-2 w-52 rounded-lg border border-[#2c3e50] shadow-2xl overflow-hidden z-50"
+                     style={{ background: '#1f2d3a' }}>
+                  <div className="px-4 py-3 border-b border-[#2c3e50]">
+                    <p className="text-xs font-bold text-white truncate">{user?.name || user?.username}</p>
+                    <p className="text-xs text-[#8ea3b0] truncate">{user?.email}</p>
+                    <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded"
+                          style={{ background: isAdmin ? '#f5a623' : '#00a8e1', color: isAdmin ? '#1a1a1a' : '#fff' }}>
+                      {isAdmin ? 'ADMIN' : 'MEMBER'}
+                    </span>
                   </div>
-                  <span className="badge bg-danger mt-1" style={{ fontSize: '0.65rem' }}>
-                    {user?.role === 'admin' ? 'Administrator' : 'Movie Buff'}
-                  </span>
-                </li>
-                <li>
-                  <Link className="dropdown-item py-2" to="/profile">
-                    <FaUserCircle className="me-2 text-secondary" /> User Profile
+                  <Link to="/bookings" onClick={() => setDropOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-[#8ea3b0] hover:text-white hover:bg-[#263340] transition-colors no-underline">
+                    <Ticket size={14} /> My Tickets
                   </Link>
-                </li>
-                <li>
-                  <Link className="dropdown-item py-2" to="/my-bookings">
-                    <FaTicketAlt className="me-2 text-danger" /> My Tickets
+                  <Link to="/watchlist" onClick={() => setDropOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-[#8ea3b0] hover:text-white hover:bg-[#263340] transition-colors no-underline">
+                    <Heart size={14} /> Watchlist
                   </Link>
-                </li>
-                {isAdmin && (
-                  <li>
-                    <Link className="dropdown-item py-2 text-warning" to="/admin/dashboard">
-                      <FaShieldAlt className="me-2" /> Admin Dashboard
+                  {isAdmin && (
+                    <Link to="/admin" onClick={() => setDropOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-yellow-400 hover:bg-[#263340] transition-colors no-underline">
+                      <Shield size={14} /> Admin Dashboard
                     </Link>
-                  </li>
-                )}
-                <li>
-                  <hr className="dropdown-divider border-secondary" />
-                </li>
-                <li>
-                  <button className="dropdown-item py-2 text-danger" onClick={handleLogout}>
-                    <FaSignOutAlt className="me-2" /> Sign Out
-                  </button>
-                </li>
-              </ul>
+                  )}
+                  <div className="border-t border-[#2c3e50]">
+                    <button onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-[#263340] transition-colors text-left">
+                      <LogOut size={14} /> Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="d-flex align-items-center gap-2">
-              <Link to="/login" className="btn btn-cinema-outline py-2 px-3">
+            <div className="flex items-center gap-2">
+              <Link to="/login"
+                className="px-4 py-1.5 text-sm font-semibold text-white border border-[#2c3e50] rounded hover:border-white transition-colors no-underline">
                 Sign In
               </Link>
-              <Link to="/register" className="btn btn-cinema py-2 px-3">
+              <Link to="/register"
+                className="px-4 py-1.5 text-sm font-semibold text-white rounded no-underline btn-prime">
                 Get Started
               </Link>
             </div>
           )}
         </div>
 
-        {/* Mobile Hamburger Toggle */}
-        <button
-          className="btn btn-dark d-md-none border-secondary text-white"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          aria-label="Toggle Navigation"
-        >
-          {mobileMenuOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
+        {/* Mobile hamburger */}
+        <button onClick={() => setOpen(p => !p)}
+          className="md:hidden p-1.5 rounded border border-[#2c3e50] text-white hover:border-[#00a8e1] transition-colors">
+          {open ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
 
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="d-md-none bg-dark border-top border-secondary px-4 py-3 mt-3">
-          <div className="d-flex flex-column gap-3">
-            <Link
-              to="/"
-              className="text-white text-decoration-none py-1"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Home
+      {/* Mobile drawer */}
+      {open && (
+        <div className="md:hidden border-t border-[#2c3e50] px-4 py-4 flex flex-col gap-3"
+             style={{ background: '#1a242f' }}>
+          {[
+            { to: '/home', label: 'Home' },
+            { to: '/watchlist', label: 'Watchlist' },
+            ...(isAuthenticated ? [{ to: '/bookings', label: 'My Bookings' }] : []),
+            ...(isAdmin ? [{ to: '/admin', label: 'Admin Dashboard' }] : []),
+          ].map(({ to, label }) => (
+            <Link key={to} to={to} onClick={() => setOpen(false)}
+              className="text-sm font-semibold text-[#8ea3b0] hover:text-white py-1 no-underline transition-colors">
+              {label}
             </Link>
-            <Link
-              to="/movies"
-              className="text-white text-decoration-none py-1"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              All Movies
-            </Link>
-            <Link
-              to="/theaters"
-              className="text-white text-decoration-none py-1"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Theaters
-            </Link>
+          ))}
+          <div className="pt-2 border-t border-[#2c3e50] flex flex-col gap-2">
             {isAuthenticated ? (
-              <>
-                <Link
-                  to="/my-bookings"
-                  className="text-white text-decoration-none py-1"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  My Bookings
-                </Link>
-                <Link
-                  to="/profile"
-                  className="text-white text-decoration-none py-1"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  My Profile ({user?.name})
-                </Link>
-                {isAdmin && (
-                  <Link
-                    to="/admin/dashboard"
-                    className="text-warning text-decoration-none py-1"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Admin Console
-                  </Link>
-                )}
-                <button
-                  className="btn btn-danger btn-sm text-start py-2 mt-2"
-                  onClick={handleLogout}
-                >
-                  <FaSignOutAlt className="me-2" /> Sign Out
-                </button>
-              </>
+              <button onClick={handleLogout}
+                className="text-left text-sm text-red-400 py-1 flex items-center gap-2">
+                <LogOut size={14} /> Sign Out ({user?.name?.split(' ')[0] || user?.username})
+              </button>
             ) : (
-              <div className="d-flex flex-column gap-2 mt-2">
-                <Link
-                  to="/login"
-                  className="btn btn-cinema-outline w-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
+              <>
+                <Link to="/login" onClick={() => setOpen(false)}
+                  className="btn-prime-outline text-center text-sm no-underline py-2 rounded">
                   Sign In
                 </Link>
-                <Link
-                  to="/register"
-                  className="btn btn-cinema w-100"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Register
+                <Link to="/register" onClick={() => setOpen(false)}
+                  className="btn-prime text-center text-sm no-underline py-2 rounded justify-center">
+                  Get Started
                 </Link>
-              </div>
+              </>
             )}
           </div>
         </div>
       )}
     </nav>
   );
-};
-
-export default Navbar;
+}

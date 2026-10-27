@@ -1,28 +1,8 @@
 import api from './api';
-
 export const showService = {
-  getShows: async (params = {}) => {
-    const response = await api.get('/shows', { params });
-    return response.data;
-  },
-
-  getShowById: async (id) => {
-    const response = await api.get(`/shows/${id}`);
-    return response.data;
-  },
-
-  createShow: async (showData) => {
-    const response = await api.post('/shows', showData);
-    return response.data;
-  },
-
-  updateShow: async (id, showData) => {
-    const response = await api.put(`/shows/${id}`, showData);
-    return response.data;
-  },
-
-  deleteShow: async (id) => {
-    const response = await api.delete(`/shows/${id}`);
-    return response.data;
-  },
+  getShows:    (params = {}) => api.get('/shows',     { params }).then(r => r.data),
+  getShowById: (id)          => api.get(`/shows/${id}`).then(r => r.data),
+  createShow:  (data)        => api.post('/shows',    data).then(r => r.data),
+  updateShow:  (id, data)    => api.put(`/shows/${id}`, data).then(r => r.data),
+  deleteShow:  (id)          => api.delete(`/shows/${id}`).then(r => r.data),
 };
